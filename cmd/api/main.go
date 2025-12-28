@@ -3,6 +3,9 @@ package main
 import (
 	"log"
 
+	"github.com/AmithSAI007/prj-flexdesk-user-service/internal/api"
+	"github.com/AmithSAI007/prj-flexdesk-user-service/internal/handler"
+	"github.com/AmithSAI007/prj-flexdesk-user-service/internal/middleware"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
@@ -16,14 +19,18 @@ func main() {
 	}
 	defer logger.Sync()
 
-	router := gin.Default()
-	router.GET("/health", func(c *gin.Context) {
-		logger.Info("Health check endpoint hit")
-		c.JSON(200, gin.H{
-			"status": "healthy",
-		})
-	})
+	router := gin.New()
+	router.Use(gin.Recovery())
+	router.Use(middleware.ErrorHandler(logger))
 
-	router.Run(":8080")
+	userHandler := handler.NewUserHandler(logger)
+	handlers := &api.HandlerRegistry{
+		UserHandler: userHandler,
+	}
+	api.SetupRoutes(router, handlers)
 
+	logger.Info("Server starting on port 8080...")
+	if err := router.Run(":8080"); err != nil {
+		logger.Error(err.Error())
+	}
 }
