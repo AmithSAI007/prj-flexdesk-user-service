@@ -1,0 +1,19 @@
+version: "2"
+sql:
+  - engine: "postgresql"
+    # Path to your SQL queries (we'll create this next)
+    queries: "./internal/db/sql/"
+    # Path to your database schema (your migration files)
+    schema: "./migrations"
+    gen:
+      go:
+        # Path to generate the Go code
+        out: "./internal/db"
+        # The package name for the generated code
+        package: "db"
+        # Emit additional code for preparing queries, which is a good performance practice
+        emit_prepared_queries: true
+        # Use sql.Null* types for nullable columns
+        emit_interface: false
+        emit_exact_table_names: false
+        emit_json_tags: true
