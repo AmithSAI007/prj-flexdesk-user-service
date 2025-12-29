@@ -16,12 +16,13 @@ type HandlerRegistry struct {
 
 func SetupRoutes(router *gin.Engine, handlers *HandlerRegistry) {
 	v1 := router.Group("/api/v1")
+	auth := v1.Group("/auth")
 	{
-		v1.POST("/users", handlers.UserHandler.CreateUser)
+		auth.POST("/register", handlers.UserHandler.Register)
 		// Add more user routes as needed
 	}
 
-	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler, ginSwagger.URL("/docs/doc.json")))
+	v1.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler, ginSwagger.URL("/docs/doc.json")))
 
 	router.GET("/docs/doc.json", func(ctx *gin.Context) {
 		ctx.Writer.Header().Set("Content-Type", "application/json")

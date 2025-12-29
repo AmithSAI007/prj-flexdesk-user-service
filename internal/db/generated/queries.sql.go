@@ -25,7 +25,7 @@ type CreateUserParams struct {
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (FlexdeskUser, error) {
-	row := q.queryRow(ctx, q.createUserStmt, createUser, arg.Username, arg.Email, arg.PasswordHash)
+	row := q.db.QueryRow(ctx, createUser, arg.Username, arg.Email, arg.PasswordHash)
 	var i FlexdeskUser
 	err := row.Scan(
 		&i.ID,
@@ -44,7 +44,7 @@ WHERE email = $1 LIMIT 1
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (FlexdeskUser, error) {
-	row := q.queryRow(ctx, q.getUserByEmailStmt, getUserByEmail, email)
+	row := q.db.QueryRow(ctx, getUserByEmail, email)
 	var i FlexdeskUser
 	err := row.Scan(
 		&i.ID,
@@ -63,7 +63,7 @@ WHERE username = $1 LIMIT 1
 `
 
 func (q *Queries) GetUserByUsername(ctx context.Context, username string) (FlexdeskUser, error) {
-	row := q.queryRow(ctx, q.getUserByUsernameStmt, getUserByUsername, username)
+	row := q.db.QueryRow(ctx, getUserByUsername, username)
 	var i FlexdeskUser
 	err := row.Scan(
 		&i.ID,

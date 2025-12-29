@@ -8,9 +8,10 @@ sql:
     gen:
       go:
         # Path to generate the Go code
-        out: "./internal/db"
+        out: "./internal/db/generated/"
         # The package name for the generated code
         package: "db"
+        sql_package: "pgx/v5"
         # Emit additional code for preparing queries, which is a good performance practice
         emit_prepared_queries: true
         # Use sql.Null* types for nullable columns
