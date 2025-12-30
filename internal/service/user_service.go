@@ -6,8 +6,9 @@ import (
 
 	"github.com/AmithSAI007/prj-flexdesk-user-service/internal/db"
 	"github.com/AmithSAI007/prj-flexdesk-user-service/internal/model"
-	"github.com/AmithSAI007/prj-flexdesk-user-service/internal/security"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
 	generated "github.com/AmithSAI007/prj-flexdesk-user-service/internal/db/generated"
@@ -15,7 +16,9 @@ import (
 
 type UserInterface interface {
 	// Define user-related methods here, e.g., CreateUser, GetUser, UpdateUser, DeleteUser, etc.
-	RegisterUser(ctx context.Context, username, email, password string) (model.User, error)
+	GetUserByEmail(ctx context.Context, email string) (*model.User, error)
+	GetUserByID(ctx context.Context, userID uuid.UUID) (*model.User, error)
+	CreateUser(ctx context.Context, username, email, password string) (*model.User, error)
 }
 
 type UserService struct {
@@ -33,47 +36,77 @@ func NewUserService(logger *zap.Logger, store db.Store) UserInterface {
 
 var _ UserInterface = (*UserService)(nil)
 
-func (s *UserService) RegisterUser(ctx context.Context, username, email, password string) (model.User, error) {
+func (s *UserService) GetUserByEmail(ctx context.Context, email string) (*model.User, error) {
 	// Implement user registration logic here
 	// For example, hash the password, validate input, and store the user in the database
-
-	_, err := s.store.GetUserByEmail(ctx, email)
-	if err == nil {
-		s.logger.Warn("Attempt to register with existing email", zap.String("email", email))
-		// Return an appropriate error indicating the email is already in use
-		return model.User{}, ErrEmailAlreadyInUse
-	}
-
-	if !errors.Is(err, pgx.ErrNoRows) {
-		s.logger.Error("Failed to check existing email", zap.Error(err))
-		return model.User{}, ErrInternalServer
-	}
-
-	hashedPassword, err := security.HashPassword(password) // Implement password hashing
+	user, err := s.store.GetUserByEmail(ctx, email)
 
 	if err != nil {
-		s.logger.Error("Failed to hash password", zap.Error(err))
-		return model.User{}, ErrInternalServer
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
+
+		s.logger.Error("Failed to get user by email", zap.Error(err))
+		return nil, ErrInternalServer
+
 	}
 
+	return &model.User{
+		ID:           user.ID.Bytes,
+		Username:     user.Username,
+		Email:        user.Email,
+		PasswordHash: user.PasswordHash,
+		CreatedAt:    user.CreatedAt.Time,
+		UpdatedAt:    user.UpdatedAt.Time,
+	}, nil
+
+}
+
+func (s *UserService) CreateUser(ctx context.Context, username, email, password string) (*model.User, error) {
+	// Implement user registration logic here
+	// For example, hash the password, validate input, and store the user in the database
 	userParams := generated.CreateUserParams{
 		Username:     username,
 		Email:        email,
-		PasswordHash: hashedPassword,
+		PasswordHash: password,
 	}
 
 	createdUser, err := s.store.CreateUser(ctx, userParams)
 	if err != nil {
 		s.logger.Error("Failed to create user", zap.Error(err))
-		return model.User{}, ErrInternalServer
+		return nil, ErrInternalServer
 	}
 
-	return model.User{
+	return &model.User{
 		ID:        createdUser.ID.Bytes,
 		Username:  createdUser.Username,
 		Email:     createdUser.Email,
 		CreatedAt: createdUser.CreatedAt.Time,
 		UpdatedAt: createdUser.UpdatedAt.Time,
+	}, nil
+}
+
+func (s *UserService) GetUserByID(ctx context.Context, userID uuid.UUID) (*model.User, error) {
+	// Implement user registration logic here
+	// For example, hash the password, validate input, and store the user in the database
+
+	user, err := s.store.GetUserByID(ctx, pgtype.UUID{Bytes: userID, Valid: true})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
+
+		s.logger.Error("Failed to get user by ID", zap.Error(err))
+		return nil, ErrInternalServer
+	}
+
+	return &model.User{
+		ID:           user.ID.Bytes,
+		Username:     user.Username,
+		Email:        user.Email,
+		PasswordHash: user.PasswordHash,
+		CreatedAt:    user.CreatedAt.Time,
+		UpdatedAt:    user.UpdatedAt.Time,
 	}, nil
 
 }

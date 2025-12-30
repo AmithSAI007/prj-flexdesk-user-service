@@ -23,6 +23,11 @@ type Config struct {
 	DBMinConns        int
 	DBMaxConnLifetime time.Duration
 	DBMaxConnIdleTime time.Duration
+
+	PrivateKeyPath string
+	PublicKeyPath  string
+
+	TokenIssuer string
 }
 
 func (c *Config) DBSource() string {
@@ -73,5 +78,10 @@ func LoadConfig() *Config {
 		DBMinConns:        dbMinConns,
 		DBMaxConnLifetime: time.Duration(dbMaxConnLifetimeMinutes) * time.Minute,
 		DBMaxConnIdleTime: time.Duration(dbMaxConnIdleTimeMinutes) * time.Minute,
+
+		PrivateKeyPath: os.Getenv("PRIVATE_KEY_PATH"),
+		PublicKeyPath:  os.Getenv("PUBLIC_KEY_PATH"),
+
+		TokenIssuer: os.Getenv("TOKEN_ISSUER"),
 	}
 }

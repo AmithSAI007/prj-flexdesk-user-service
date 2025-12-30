@@ -3,6 +3,7 @@ package api
 import (
 	"github.com/AmithSAI007/prj-flexdesk-user-service/docs"
 	"github.com/AmithSAI007/prj-flexdesk-user-service/internal/handler"
+	"github.com/AmithSAI007/prj-flexdesk-user-service/internal/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/swaggo/files"
@@ -11,14 +12,17 @@ import (
 
 type HandlerRegistry struct {
 	// Add your handlers here
-	UserHandler *handler.UserHandler
+	AuthHandler    *handler.AuthHandler
+	AuthMiddleware *middleware.AuthMiddleware
+	UserHandler    *handler.UserHandler
 }
 
 func SetupRoutes(router *gin.Engine, handlers *HandlerRegistry) {
 	v1 := router.Group("/api/v1")
 	auth := v1.Group("/auth")
 	{
-		auth.POST("/register", handlers.UserHandler.Register)
+		auth.POST("/register", handlers.AuthHandler.Register)
+		auth.POST("/login", handlers.AuthHandler.Login)
 		// Add more user routes as needed
 	}
 
@@ -31,4 +35,10 @@ func SetupRoutes(router *gin.Engine, handlers *HandlerRegistry) {
 	})
 
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
+
+	user := v1.Group("/user")
+	user.Use(handlers.AuthMiddleware.Authenticate())
+	{
+		user.GET("/profile", handlers.UserHandler.GetUserProfile)
+	}
 }
