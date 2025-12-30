@@ -12,16 +12,31 @@ import (
 	"github.com/AmithSAI007/prj-flexdesk-user-service/internal/handler"
 	"github.com/AmithSAI007/prj-flexdesk-user-service/internal/middleware"
 	"github.com/AmithSAI007/prj-flexdesk-user-service/internal/service"
+	"github.com/AmithSAI007/prj-flexdesk-user-service/internal/token"
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 )
 
-// @title        FlexDesk User Service API
-// @version      1.0
-// @description  This is the API for managing users...
+// @title           FlexDesk User Service API
+// @version         1.0
+// @description     This is the API for the FlexDesk User Service.
+
+// @contact.name   API Support
+// @contact.url    http://www.example.com/support
+// @contact.email  support@example.com
+
+// @license.name  Apache 2.0
+// @license.url   http://www.apache.org/licenses/LICENSE-2.0.html
+
+// @host      localhost:8080
 // @BasePath  /api/v1
+
+// @securityDefinitions.apikey  BearerAuth
+// @in                          header
+// @name                        Authorization
+// @description                 "Type 'Bearer' followed by a space and a JWT token."
 func main() {
 
 	cfg := config.LoadConfig()
@@ -64,7 +79,25 @@ func main() {
 
 	store := db.New(dbpool)
 
+	keyService := token.NewLocalKeyService(logger)
+	privateKey, publicKey, err := keyService.LoadKeys(ctx, cfg.PrivateKeyPath, cfg.PublicKeyPath)
+
+	if err != nil {
+		logger.Fatal("Failed to load cryptographic keys", zap.Error(err))
+	}
+
+	tokenService := service.NewTokenService(
+		cfg.TokenIssuer,
+		logger,
+		privateKey,
+		publicKey,
+		store,
+	)
+
 	userService := service.NewUserService(logger, store)
+	authService := service.NewAuthService(logger, userService, tokenService)
+
+	authMiddleware := middleware.NewAuthMiddleware(logger, tokenService)
 
 	router := gin.New()
 	router.Use(gin.Recovery())
@@ -72,9 +105,12 @@ func main() {
 	router.Use(middleware.PrometheusMetrics())
 
 	validate := validator.New()
+	authHandler := handler.NewAuthHandler(logger, authService, validate)
 	userHandler := handler.NewUserHandler(logger, userService, validate)
 	handlers := &api.HandlerRegistry{
-		UserHandler: userHandler,
+		AuthHandler:    authHandler,
+		AuthMiddleware: authMiddleware,
+		UserHandler:    userHandler,
 	}
 	api.SetupRoutes(router, handlers)
 

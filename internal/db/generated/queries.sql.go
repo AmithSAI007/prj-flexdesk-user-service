@@ -7,7 +7,38 @@ package db
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const createRefreshToken = `-- name: CreateRefreshToken :one
+INSERT INTO flexdesk.refresh_tokens (
+  user_id, token_hash, expires_at
+) VALUES (
+  $1, $2, $3
+)
+RETURNING id, user_id, token_hash, is_active, expires_at, created_at
+`
+
+type CreateRefreshTokenParams struct {
+	UserID    pgtype.UUID        `json:"user_id"`
+	TokenHash string             `json:"token_hash"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+}
+
+func (q *Queries) CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) (FlexdeskRefreshToken, error) {
+	row := q.db.QueryRow(ctx, createRefreshToken, arg.UserID, arg.TokenHash, arg.ExpiresAt)
+	var i FlexdeskRefreshToken
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TokenHash,
+		&i.IsActive,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
 
 const createUser = `-- name: CreateUser :one
 INSERT INTO flexdesk.users (
@@ -38,6 +69,25 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (Flexdes
 	return i, err
 }
 
+const getRefreshToken = `-- name: GetRefreshToken :one
+SELECT id, user_id, token_hash, is_active, expires_at, created_at FROM flexdesk.refresh_tokens
+WHERE token_hash = $1
+`
+
+func (q *Queries) GetRefreshToken(ctx context.Context, tokenHash string) (FlexdeskRefreshToken, error) {
+	row := q.db.QueryRow(ctx, getRefreshToken, tokenHash)
+	var i FlexdeskRefreshToken
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TokenHash,
+		&i.IsActive,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getUserByEmail = `-- name: GetUserByEmail :one
 SELECT id, username, email, password_hash, created_at, updated_at FROM flexdesk.users
 WHERE email = $1 LIMIT 1
@@ -45,6 +95,25 @@ WHERE email = $1 LIMIT 1
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (FlexdeskUser, error) {
 	row := q.db.QueryRow(ctx, getUserByEmail, email)
+	var i FlexdeskUser
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Email,
+		&i.PasswordHash,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getUserByID = `-- name: GetUserByID :one
+SELECT id, username, email, password_hash, created_at, updated_at FROM flexdesk.users
+WHERE id = $1 LIMIT 1
+`
+
+func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (FlexdeskUser, error) {
+	row := q.db.QueryRow(ctx, getUserByID, id)
 	var i FlexdeskUser
 	err := row.Scan(
 		&i.ID,

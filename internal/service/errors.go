@@ -8,4 +8,8 @@ var (
 	ErrUserNotFound       = errors.New("user not found")
 	ErrInvalidCredentials = errors.New("invalid email or password")
 	ErrInternalServer     = errors.New("internal server error")
+	ErrTokenInvalid       = errors.New("token is invalid")
+	ErrTokenExpired       = errors.New("token has expired")
+	ErrTokenSignature     = errors.New("token signature is invalid")
+	ErrInvalidClaims      = errors.New("token claims are invalid")
 )
