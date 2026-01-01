@@ -23,6 +23,7 @@ func SetupRoutes(router *gin.Engine, handlers *HandlerRegistry) {
 	{
 		auth.POST("/register", handlers.AuthHandler.Register)
 		auth.POST("/login", handlers.AuthHandler.Login)
+		auth.POST("/refresh", handlers.AuthHandler.RefreshToken)
 		// Add more user routes as needed
 	}
 

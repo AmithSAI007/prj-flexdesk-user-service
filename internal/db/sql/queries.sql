@@ -29,3 +29,15 @@ RETURNING *;
 -- name: GetRefreshToken :one
 SELECT * FROM flexdesk.refresh_tokens
 WHERE token_hash = $1;
+
+-- name: InvalidateRefreshToken :exec
+UPDATE flexdesk.refresh_tokens
+SET is_active = FALSE,
+    expires_at = NOW()
+WHERE id = $1;
+
+-- name: InvalidateRefreshTokenByHash :exec
+UPDATE flexdesk.refresh_tokens
+SET is_active = FALSE,
+    expires_at = NOW()
+WHERE token_hash = $1;

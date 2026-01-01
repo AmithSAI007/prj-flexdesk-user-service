@@ -139,3 +139,83 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 
 }
+
+// RefreshToken handles the issuance of a new access token using a valid refresh token.
+// @Summary      Refresh access token
+// @Description  Issues a new access token using a valid refresh token.
+// @Tags         Authentication
+// @Produce      json
+// @Success      200  {object}  dto.LoginResponse     "Token refreshed successfully"
+// @Failure      401  {object}  dto.ErrorResponse    "Unauthorized"
+// @Failure      500  {object}  dto.ErrorResponse    "Internal Server Error"
+// @Router       /auth/refresh [post]
+func (h *AuthHandler) RefreshToken(c *gin.Context) {
+	cookie, err := c.Request.Cookie("refresh_token")
+	if err != nil {
+		h.logger.Warn("Refresh token cookie not found", zap.Error(err))
+		c.JSON(http.StatusUnauthorized, dto.ErrorResponse{Error: "Refresh token not provided"})
+		return
+	}
+
+	newAccessToken, newRefreshToken, err := h.authService.ValidateRefreshToken(c.Request.Context(), cookie.Value)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrInvalidRefreshToken):
+			c.JSON(http.StatusUnauthorized, dto.ErrorResponse{Error: "Invalid refresh token"})
+		default:
+			h.logger.Error("An unhandled error occurred during token refresh", zap.Error(err))
+			c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Error: "An internal error occurred."})
+		}
+		return
+	}
+
+	newCookie := &http.Cookie{
+		Name:     "refresh_token",
+		Value:    newRefreshToken,
+		Path:     "/api/v1/auth",
+		Domain:   "localhost",
+		MaxAge:   3600 * 24 * 7, // 1 week in seconds
+		Secure:   false,         // Set to true in production with HTTPS
+		HttpOnly: true,
+	}
+
+	http.SetCookie(c.Writer, newCookie)
+
+	resp := dto.LoginResponse{
+		AccessToken: newAccessToken,
+	}
+
+	c.JSON(http.StatusOK, resp)
+
+}
+
+func (h *AuthHandler) Logout(c *gin.Context) {
+	cookie, err := c.Request.Cookie("refresh_token")
+	if err != nil {
+		h.logger.Warn("Refresh token cookie not found during logout", zap.Error(err))
+		c.JSON(http.StatusUnauthorized, dto.ErrorResponse{Error: "Refresh token not provided"})
+		return
+	}
+
+	err = h.authService.Logout(c.Request.Context(), cookie.Value)
+	if err != nil {
+		h.logger.Error("An unhandled error occurred during logout", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Error: "An internal error occurred."})
+		return
+	}
+
+	// Clear the refresh token cookie
+	expiredCookie := &http.Cookie{
+		Name:     "refresh_token",
+		Value:    "",
+		Path:     "/api/v1/auth",
+		Domain:   "localhost",
+		MaxAge:   3600 * 24 * 7, // 1 week in seconds
+		Secure:   false,         // Set to true in production with HTTPS
+		HttpOnly: true,
+	}
+
+	http.SetCookie(c.Writer, expiredCookie)
+
+	c.JSON(http.StatusOK, gin.H{"message": "Logged out successfully"})
+}
