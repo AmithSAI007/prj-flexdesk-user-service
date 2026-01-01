@@ -14,6 +14,9 @@ type Store interface {
 	GetUserByID(ctx context.Context, id pgtype.UUID) (generated.FlexdeskUser, error)
 	GetUserByUsername(ctx context.Context, username string) (generated.FlexdeskUser, error)
 	CreateRefreshToken(ctx context.Context, arg generated.CreateRefreshTokenParams) (generated.FlexdeskRefreshToken, error)
+	GetRefreshToken(ctx context.Context, tokenHash string) (generated.FlexdeskRefreshToken, error)
+	InvalidateRefreshToken(ctx context.Context, tokenId pgtype.UUID) error
+	InvalidateRefreshTokenByHash(ctx context.Context, tokenHash string) error
 }
 
 var _ Store = (*generated.Queries)(nil)

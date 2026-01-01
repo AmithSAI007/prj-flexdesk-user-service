@@ -95,7 +95,7 @@ func main() {
 	)
 
 	userService := service.NewUserService(logger, store)
-	authService := service.NewAuthService(logger, userService, tokenService)
+	authService := service.NewAuthService(logger, userService, tokenService, store)
 
 	authMiddleware := middleware.NewAuthMiddleware(logger, tokenService)
 

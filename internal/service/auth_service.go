@@ -4,10 +4,16 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"time"
 
+	"github.com/AmithSAI007/prj-flexdesk-user-service/internal/db"
 	"github.com/AmithSAI007/prj-flexdesk-user-service/internal/model"
 	"github.com/AmithSAI007/prj-flexdesk-user-service/internal/security"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+
+	generated "github.com/AmithSAI007/prj-flexdesk-user-service/internal/db/generated"
 
 	"go.uber.org/zap"
 )
@@ -16,20 +22,23 @@ type AuthInterface interface {
 	// Define user-related methods here, e.g., CreateUser, GetUser, UpdateUser, DeleteUser, etc.
 	RegisterUser(ctx context.Context, username, email, password string) (*model.User, error)
 	Login(ctx context.Context, email, password string) (string, string, error)
-	persistRefreshToken(ctx context.Context, userID string, refreshToken string, expiration time.Time) error
+	ValidateRefreshToken(ctx context.Context, refreshToken string) (string, string, error)
+	Logout(ctx context.Context, refreshToken string) error
 }
 
 type AuthService struct {
 	logger         *zap.Logger
+	store          db.Store
 	userInterface  UserInterface
 	tokenInterface TokenInterface
 }
 
-func NewAuthService(logger *zap.Logger, userInterface UserInterface, tokenInterface TokenInterface) AuthInterface {
+func NewAuthService(logger *zap.Logger, userInterface UserInterface, tokenInterface TokenInterface, store db.Store) AuthInterface {
 	return &AuthService{
 		logger:         logger,
 		userInterface:  userInterface,
 		tokenInterface: tokenInterface,
+		store:          store,
 	}
 }
 
@@ -72,39 +81,98 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (string
 		return "", "", ErrInvalidCredentials
 	}
 
-	now := time.Now()
-
-	accessToken, refreshToken, err := s.tokenInterface.NewTokenPair(&model.User{
-		ID:        user.ID,
-		Email:     user.Email,
-		Username:  user.Username,
-		CreatedAt: user.CreatedAt,
-		UpdatedAt: user.UpdatedAt,
-	}, now)
+	accessToken, refreshToken, err := s.tokenInterface.NewTokenPair(user, time.Now())
 	if err != nil {
-		s.logger.Error("Failed to generate token pair", zap.Error(err))
+		s.logger.Error("Failed to generate token pair", zap.Error(err), zap.String("userID", user.ID.String()))
 		return "", "", ErrInternalServer
-	}
-
-	expiration := now.Add(7 * 24 * time.Hour) // Assuming refresh token validity is 7 days
-
-	err = s.persistRefreshToken(ctx, user.ID.String(), refreshToken, expiration)
-	if err != nil {
-		return "", "", err
 	}
 
 	return accessToken, refreshToken, nil
 }
 
-func (s *AuthService) persistRefreshToken(ctx context.Context, userID string, refreshToken string, expiration time.Time) error {
-	// Implement logic to persist refresh token, e.g., store in database or cache
+func (s *AuthService) ValidateRefreshToken(ctx context.Context, refreshToken string) (string, string, error) {
+
 	hash := sha256.New()
 	hash.Write([]byte(refreshToken))
 	tokenHash := hex.EncodeToString(hash.Sum(nil))
 
-	tokenErr := s.tokenInterface.SaveRefreshToken(ctx, userID, tokenHash, expiration)
-	if tokenErr != nil {
-		s.logger.Error("Failed to persist refresh token", zap.Error(tokenErr))
+	token, err := s.store.GetRefreshToken(context.Background(), tokenHash)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			s.logger.Error("Refresh token not found", zap.String("token_hash", tokenHash))
+			return "", "", ErrInvalidRefreshToken
+		}
+		s.logger.Error("Failed to retrieve refresh token", zap.Error(err))
+		return "", "", ErrInternalServer
+	}
+
+	err = s.store.InvalidateRefreshToken(ctx, token.ID)
+	if err != nil {
+		s.logger.Error("Failed to invalidate refresh token", zap.Error(err), zap.String("tokenID", token.ID.String()))
+		return "", "", ErrInternalServer
+	}
+
+	if !token.IsActive || token.ExpiresAt.Time.Before(time.Now()) {
+		s.logger.Warn("Refresh token is inactive or expired", zap.String("tokenHash", tokenHash))
+		return "", "", ErrInvalidRefreshToken
+	}
+
+	user, err := s.userInterface.GetUserByID(ctx, token.UserID.Bytes)
+	if err != nil {
+		s.logger.Warn("User associated with refresh token not found", zap.String("userID", token.UserID.String()))
+		return "", "", ErrInvalidRefreshToken
+	}
+
+	accessToken, refreshToken, err := s.issueNewTokenPair(ctx, user)
+	if err != nil {
+		return "", "", err
+	}
+
+	return accessToken, refreshToken, nil
+
+}
+
+func (s *AuthService) hashRefreshToken(token string) string {
+	// Persist the NEW refresh token
+	hash := sha256.New()
+	hash.Write([]byte(token))
+	tokenHash := hex.EncodeToString(hash.Sum(nil))
+	return tokenHash
+
+}
+
+func (s *AuthService) issueNewTokenPair(ctx context.Context, user *model.User) (string, string, error) {
+	now := time.Now()
+	accessToken, refreshToken, err := s.tokenInterface.NewTokenPair(user, now)
+	if err != nil {
+		s.logger.Error("Failed to generate token pair", zap.Error(err), zap.String("userID", user.ID.String()))
+		return "", "", ErrInternalServer
+	}
+
+	expiration := now.Add(7 * 24 * time.Hour) // 7 day validity for refresh token
+
+	tokenHash := s.hashRefreshToken(refreshToken)
+
+	_, err = s.store.CreateRefreshToken(ctx, generated.CreateRefreshTokenParams{
+		UserID:    pgtype.UUID{Bytes: user.ID, Valid: true},
+		TokenHash: tokenHash,
+		ExpiresAt: pgtype.Timestamptz{Time: expiration, Valid: true},
+	})
+	if err != nil {
+		s.logger.Error("Failed to persist new refresh token", zap.Error(err), zap.String("userID", user.ID.String()))
+		return "", "", ErrInternalServer
+	}
+
+	return accessToken, refreshToken, nil
+}
+
+func (s *AuthService) Logout(ctx context.Context, refreshToken string) error {
+
+	tokenHash := s.hashRefreshToken(refreshToken)
+
+	err := s.store.InvalidateRefreshTokenByHash(ctx, tokenHash)
+	if err != nil {
+		s.logger.Error("Failed to invalidate refresh token during logout", zap.Error(err), zap.String("tokenHash", tokenHash))
 		return ErrInternalServer
 	}
 

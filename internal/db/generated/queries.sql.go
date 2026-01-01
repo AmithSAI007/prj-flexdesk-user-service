@@ -144,3 +144,27 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (Flexd
 	)
 	return i, err
 }
+
+const invalidateRefreshToken = `-- name: InvalidateRefreshToken :exec
+UPDATE flexdesk.refresh_tokens
+SET is_active = FALSE,
+    expires_at = NOW()
+WHERE id = $1
+`
+
+func (q *Queries) InvalidateRefreshToken(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, invalidateRefreshToken, id)
+	return err
+}
+
+const invalidateRefreshTokenByHash = `-- name: InvalidateRefreshTokenByHash :exec
+UPDATE flexdesk.refresh_tokens
+SET is_active = FALSE,
+    expires_at = NOW()
+WHERE token_hash = $1
+`
+
+func (q *Queries) InvalidateRefreshTokenByHash(ctx context.Context, tokenHash string) error {
+	_, err := q.db.Exec(ctx, invalidateRefreshTokenByHash, tokenHash)
+	return err
+}

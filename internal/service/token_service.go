@@ -1,7 +1,6 @@
 package service
 
 import (
-	"context"
 	"crypto/ecdsa"
 	"errors"
 	"fmt"
@@ -11,16 +10,12 @@ import (
 	"github.com/AmithSAI007/prj-flexdesk-user-service/internal/model"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
-
-	generated "github.com/AmithSAI007/prj-flexdesk-user-service/internal/db/generated"
 )
 
 type TokenInterface interface {
 	NewTokenPair(user *model.User, now time.Time) (accessToken string, refreshToken string, err error)
 	ValidateAccessToken(tokenStr string) (*TokenClaims, error)
-	SaveRefreshToken(ctx context.Context, userID string, tokenHash string, expiresAt time.Time) error
 }
 
 const (
@@ -135,20 +130,4 @@ func (s *TokenService) generateToken(userID, email, tokenType string, now time.T
 	s.logger.Info("Token generated successfully for user", zap.String("user_id", userID), zap.String("type", tokenType))
 	return signedToken, nil
 
-}
-
-func (s *TokenService) SaveRefreshToken(ctx context.Context, userID string, tokenHash string, expiresAt time.Time) error {
-
-	_, err := s.store.CreateRefreshToken(ctx, generated.CreateRefreshTokenParams{
-		UserID:    pgtype.UUID{Bytes: uuid.MustParse(userID), Valid: true},
-		TokenHash: tokenHash,
-		ExpiresAt: pgtype.Timestamptz{Time: expiresAt, Valid: true},
-	})
-
-	if err != nil {
-		s.logger.Error("Failed to save refresh token", zap.Error(err))
-		return fmt.Errorf("failed to save refresh token: %w", err)
-	}
-
-	return nil
 }
