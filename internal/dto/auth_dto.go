@@ -27,3 +27,7 @@ type LoginRequest struct {
 type LoginResponse struct {
 	AccessToken string `json:"access_token"`
 }
+
+type LogoutResponse struct {
+	Message string `json:"message"`
+}

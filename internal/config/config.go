@@ -2,32 +2,33 @@ package config
 
 import (
 	"fmt"
-	"os"
-	"strconv"
+	"strings"
 	"time"
+
+	"github.com/spf13/viper"
 )
 
 type Config struct {
-	AppEnv   string
-	HttpPort string
+	AppEnv   string `mapstructure:"APP_ENV"`
+	HttpPort string `mapstructure:"HTTP_PORT"`
 
-	DBUser                 string
-	DBPassword             string
-	DBHost                 string
-	DBPort                 string
-	DBName                 string
-	CloudSqlConnectionName string
-	DBSSLMode              string
+	DBUser                 string `mapstructure:"DB_USER"`
+	DBPassword             string `mapstructure:"DB_PASSWORD"`
+	DBHost                 string `mapstructure:"DB_HOST"`
+	DBPort                 string `mapstructure:"DB_PORT"`
+	DBName                 string `mapstructure:"DB_NAME"`
+	CloudSqlConnectionName string `mapstructure:"CLOUD_SQL_CONNECTION_NAME"`
+	DBSSLMode              string `mapstructure:"DB_SSL_MODE"`
 
-	DBMaxConns        int
-	DBMinConns        int
-	DBMaxConnLifetime time.Duration
-	DBMaxConnIdleTime time.Duration
+	DBMaxConns        int           `mapstructure:"DB_MAX_CONNS"`
+	DBMinConns        int           `mapstructure:"DB_MIN_CONNS"`
+	DBMaxConnLifetime time.Duration `mapstructure:"DB_MAX_CONN_LIFETIME"`
+	DBMaxConnIdleTime time.Duration `mapstructure:"DB_MAX_CONN_IDLE_TIME"`
 
-	PrivateKeyPath string
-	PublicKeyPath  string
+	PrivateKeyPath string `mapstructure:"PRIVATE_KEY_PATH"`
+	PublicKeyPath  string `mapstructure:"PUBLIC_KEY_PATH"`
 
-	TokenIssuer string
+	TokenIssuer string `mapstructure:"TOKEN_ISSUER"`
 }
 
 func (c *Config) DBSource() string {
@@ -41,47 +42,35 @@ func (c *Config) DBSource() string {
 		c.DBUser, c.DBPassword, c.DBHost, c.DBPort, c.DBName, c.DBSSLMode)
 }
 
-func LoadConfig() *Config {
+func LoadConfig(path string) (*Config, error) {
 
-	dbMaxConns, err := strconv.Atoi(os.Getenv("DB_MAX_CONNS"))
-	if err != nil {
-		dbMaxConns = 10 // default value if not set or invalid
+	viper.SetDefault("APP_ENV", "development")
+	viper.SetDefault("HTTP_PORT", "8080")
+	viper.SetDefault("DB_HOST", "localhost")
+	viper.SetDefault("DB_PORT", "5432")
+	viper.SetDefault("DB_SSL_MODE", "disable")
+	viper.SetDefault("DB_MAX_CONNS", 10)
+	viper.SetDefault("DB_MIN_CONNS", 2)
+	viper.SetDefault("DB_MAX_CONN_LIFETIME_MINUTES", 30*time.Minute)
+	viper.SetDefault("DB_MAX_CONN_IDLE_TIME_MINUTES", 5*time.Minute)
+	viper.SetDefault("TOKEN_ISSUER", "rate-my-setup")
+
+	viper.AddConfigPath(path)
+	viper.SetConfigName("config")
+	viper.SetConfigType("yaml")
+
+	viper.AutomaticEnv()
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+
+	err := viper.ReadInConfig()
+	if _, ok := err.(viper.ConfigFileNotFoundError); err != nil && !ok {
+		return nil, fmt.Errorf("fatal error config file: %w", err)
 	}
-	dbMinConns, err := strconv.Atoi(os.Getenv("DB_MIN_CONNS"))
-	if err != nil {
-		dbMinConns = 2 // default value if not set or invalid
+
+	var config Config
+	if err := viper.Unmarshal(&config); err != nil {
+		return nil, fmt.Errorf("unable to decode into struct, %w", err)
 	}
 
-	dbMaxConnLifetimeMinutes, err := strconv.Atoi(os.Getenv("DB_MAX_CONN_LIFETIME_MINUTES"))
-	if err != nil {
-		dbMaxConnLifetimeMinutes = 30 // default value if not set or invalid
-	}
-
-	dbMaxConnIdleTimeMinutes, err := strconv.Atoi(os.Getenv("DB_MAX_CONN_IDLE_TIME_MINUTES"))
-	if err != nil {
-		dbMaxConnIdleTimeMinutes = 5 // default value if not set or invalid
-	}
-
-	return &Config{
-		AppEnv:   os.Getenv("APP_ENV"),
-		HttpPort: os.Getenv("HTTP_PORT"),
-
-		DBUser:                 os.Getenv("DB_USER"),
-		DBPassword:             os.Getenv("DB_PASSWORD"),
-		DBHost:                 os.Getenv("DB_HOST"),
-		DBPort:                 os.Getenv("DB_PORT"),
-		DBName:                 os.Getenv("DB_NAME"),
-		CloudSqlConnectionName: os.Getenv("CLOUD_SQL_CONNECTION_NAME"),
-		DBSSLMode:              os.Getenv("DB_SSL_MODE"),
-
-		DBMaxConns:        dbMaxConns,
-		DBMinConns:        dbMinConns,
-		DBMaxConnLifetime: time.Duration(dbMaxConnLifetimeMinutes) * time.Minute,
-		DBMaxConnIdleTime: time.Duration(dbMaxConnIdleTimeMinutes) * time.Minute,
-
-		PrivateKeyPath: os.Getenv("PRIVATE_KEY_PATH"),
-		PublicKeyPath:  os.Getenv("PUBLIC_KEY_PATH"),
-
-		TokenIssuer: os.Getenv("TOKEN_ISSUER"),
-	}
+	return &config, nil
 }

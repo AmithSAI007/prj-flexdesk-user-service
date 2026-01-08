@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/AmithSAI007/prj-flexdesk-user-service/internal/db"
 	"github.com/AmithSAI007/prj-flexdesk-user-service/internal/model"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -37,10 +36,9 @@ type TokenService struct {
 	publicKey       *ecdsa.PublicKey
 	accessDuration  time.Duration
 	refreshDuration time.Duration
-	store           db.Store
 }
 
-func NewTokenService(issuer string, logger *zap.Logger, privateKey *ecdsa.PrivateKey, publicKey *ecdsa.PublicKey, store db.Store) TokenInterface {
+func NewTokenService(issuer string, logger *zap.Logger, privateKey *ecdsa.PrivateKey, publicKey *ecdsa.PublicKey) TokenInterface {
 
 	return &TokenService{
 		issuer:          issuer,
@@ -49,7 +47,6 @@ func NewTokenService(issuer string, logger *zap.Logger, privateKey *ecdsa.Privat
 		logger:          logger,
 		privateKey:      privateKey,
 		publicKey:       publicKey,
-		store:           store,
 	}
 }
 
