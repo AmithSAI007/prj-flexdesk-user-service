@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/AmithSAI007/prj-flexdesk-user-service/internal/db"
 	"github.com/AmithSAI007/prj-flexdesk-user-service/internal/dto"
 	"github.com/AmithSAI007/prj-flexdesk-user-service/internal/service"
 	"github.com/gin-gonic/gin"
@@ -15,13 +16,15 @@ type AuthHandler struct {
 	logger      *zap.Logger
 	authService service.AuthInterface
 	validator   *validator.Validate
+	store       db.Store
 }
 
-func NewAuthHandler(logger *zap.Logger, authService service.AuthInterface, validator *validator.Validate) *AuthHandler {
+func NewAuthHandler(logger *zap.Logger, authService service.AuthInterface, validator *validator.Validate, store db.Store) *AuthHandler {
 	return &AuthHandler{
 		logger:      logger,
 		authService: authService,
 		validator:   validator,
+		store:       store,
 	}
 }
 
@@ -189,6 +192,15 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 
 }
 
+// Logout handles user logout by invalidating the refresh token.
+// @Summary      User logout
+// @Description  Logs out the user by invalidating the refresh token.
+// @Tags         Authentication
+// @Produce      json
+// @Success      200  {object}  dto.LogoutResponse     "Logged out successfully"
+// @Failure      401  {object}  dto.ErrorResponse    "Unauthorized"
+// @Failure      500  {object}  dto.ErrorResponse    "Internal Server Error"
+// @Router       /auth/logout [post]
 func (h *AuthHandler) Logout(c *gin.Context) {
 	cookie, err := c.Request.Cookie("refresh_token")
 	if err != nil {
@@ -217,5 +229,9 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 
 	http.SetCookie(c.Writer, expiredCookie)
 
-	c.JSON(http.StatusOK, gin.H{"message": "Logged out successfully"})
+	resp := dto.LogoutResponse{
+		Message: "Logged out successfully",
+	}
+
+	c.JSON(http.StatusOK, resp)
 }

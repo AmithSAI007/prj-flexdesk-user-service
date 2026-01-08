@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 
-	"github.com/AmithSAI007/prj-flexdesk-user-service/internal/db"
 	"github.com/AmithSAI007/prj-flexdesk-user-service/internal/model"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -16,30 +15,28 @@ import (
 
 type UserInterface interface {
 	// Define user-related methods here, e.g., CreateUser, GetUser, UpdateUser, DeleteUser, etc.
-	GetUserByEmail(ctx context.Context, email string) (*model.User, error)
-	GetUserByID(ctx context.Context, userID uuid.UUID) (*model.User, error)
-	CreateUser(ctx context.Context, username, email, password string) (*model.User, error)
+	GetUserByEmail(ctx context.Context, q generated.Querier, email string) (*model.User, error)
+	GetUserByID(ctx context.Context, q generated.Querier, userID uuid.UUID) (*model.User, error)
+	CreateUser(ctx context.Context, q generated.Querier, username, email, password string) (*model.User, error)
 }
 
 type UserService struct {
 	// Add necessary fields here, e.g., database connection, logger, etc.
 	logger *zap.Logger
-	store  db.Store
 }
 
-func NewUserService(logger *zap.Logger, store db.Store) UserInterface {
+func NewUserService(logger *zap.Logger) UserInterface {
 	return &UserService{
 		logger: logger,
-		store:  store,
 	}
 }
 
 var _ UserInterface = (*UserService)(nil)
 
-func (s *UserService) GetUserByEmail(ctx context.Context, email string) (*model.User, error) {
+func (s *UserService) GetUserByEmail(ctx context.Context, q generated.Querier, email string) (*model.User, error) {
 	// Implement user registration logic here
 	// For example, hash the password, validate input, and store the user in the database
-	user, err := s.store.GetUserByEmail(ctx, email)
+	user, err := q.GetUserByEmail(ctx, email)
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -62,7 +59,7 @@ func (s *UserService) GetUserByEmail(ctx context.Context, email string) (*model.
 
 }
 
-func (s *UserService) CreateUser(ctx context.Context, username, email, password string) (*model.User, error) {
+func (s *UserService) CreateUser(ctx context.Context, q generated.Querier, username, email, password string) (*model.User, error) {
 	// Implement user registration logic here
 	// For example, hash the password, validate input, and store the user in the database
 	userParams := generated.CreateUserParams{
@@ -71,7 +68,7 @@ func (s *UserService) CreateUser(ctx context.Context, username, email, password 
 		PasswordHash: password,
 	}
 
-	createdUser, err := s.store.CreateUser(ctx, userParams)
+	createdUser, err := q.CreateUser(ctx, userParams)
 	if err != nil {
 		s.logger.Error("Failed to create user", zap.Error(err))
 		return nil, ErrInternalServer
@@ -86,11 +83,11 @@ func (s *UserService) CreateUser(ctx context.Context, username, email, password 
 	}, nil
 }
 
-func (s *UserService) GetUserByID(ctx context.Context, userID uuid.UUID) (*model.User, error) {
+func (s *UserService) GetUserByID(ctx context.Context, q generated.Querier, userID uuid.UUID) (*model.User, error) {
 	// Implement user registration logic here
 	// For example, hash the password, validate input, and store the user in the database
 
-	user, err := s.store.GetUserByID(ctx, pgtype.UUID{Bytes: userID, Valid: true})
+	user, err := q.GetUserByID(ctx, pgtype.UUID{Bytes: userID, Valid: true})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrUserNotFound

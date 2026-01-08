@@ -4,19 +4,43 @@ import (
 	"context"
 
 	generated "github.com/AmithSAI007/prj-flexdesk-user-service/internal/db/generated"
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Store interface {
-	// Add methods here that you want to expose from the store
-	CreateUser(ctx context.Context, arg generated.CreateUserParams) (generated.FlexdeskUser, error)
-	GetUserByEmail(ctx context.Context, email string) (generated.FlexdeskUser, error)
-	GetUserByID(ctx context.Context, id pgtype.UUID) (generated.FlexdeskUser, error)
-	GetUserByUsername(ctx context.Context, username string) (generated.FlexdeskUser, error)
-	CreateRefreshToken(ctx context.Context, arg generated.CreateRefreshTokenParams) (generated.FlexdeskRefreshToken, error)
-	GetRefreshToken(ctx context.Context, tokenHash string) (generated.FlexdeskRefreshToken, error)
-	InvalidateRefreshToken(ctx context.Context, tokenId pgtype.UUID) error
-	InvalidateRefreshTokenByHash(ctx context.Context, tokenHash string) error
+	generated.Querier
+	ExecTx(ctx context.Context, fn func(generated.Querier) error) error
 }
 
-var _ Store = (*generated.Queries)(nil)
+type SQLStore struct {
+	connPool *pgxpool.Pool
+	*generated.Queries
+}
+
+func NewStore(connPool *pgxpool.Pool) Store {
+	return &SQLStore{
+		connPool: connPool,
+		Queries:  generated.New(connPool),
+	}
+}
+
+var _ Store = (*SQLStore)(nil)
+
+func (store *SQLStore) ExecTx(ctx context.Context, fn func(generated.Querier) error) error {
+	tx, err := store.connPool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return err
+	}
+
+	q := generated.New(tx)
+	err = fn(q)
+	if err != nil {
+		if rbErr := tx.Rollback(ctx); rbErr != nil {
+			return rbErr
+		}
+		return err
+	}
+
+	return tx.Commit(ctx)
+}

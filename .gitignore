@@ -41,3 +41,5 @@ app.log
 
 
 keys/
+
+config.yaml

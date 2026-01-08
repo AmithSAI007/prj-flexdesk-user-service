@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/AmithSAI007/prj-flexdesk-user-service/internal/constants"
+	"github.com/AmithSAI007/prj-flexdesk-user-service/internal/db"
 	"github.com/AmithSAI007/prj-flexdesk-user-service/internal/dto"
 	"github.com/AmithSAI007/prj-flexdesk-user-service/internal/service"
 	"github.com/gin-gonic/gin"
@@ -18,13 +19,15 @@ type UserHandler struct {
 	logger      *zap.Logger
 	userService service.UserInterface
 	validator   *validator.Validate
+	store       db.Store
 }
 
-func NewUserHandler(logger *zap.Logger, userService service.UserInterface, validator *validator.Validate) *UserHandler {
+func NewUserHandler(logger *zap.Logger, userService service.UserInterface, validator *validator.Validate, store db.Store) *UserHandler {
 	return &UserHandler{
 		logger:      logger,
 		userService: userService,
 		validator:   validator,
+		store:       store,
 	}
 }
 
@@ -55,7 +58,7 @@ func (h *UserHandler) GetUserProfile(c *gin.Context) {
 		return
 	}
 
-	user, err := h.userService.GetUserByID(c.Request.Context(), userId)
+	user, err := h.userService.GetUserByID(c.Request.Context(), h.store, userId)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrUserNotFound):

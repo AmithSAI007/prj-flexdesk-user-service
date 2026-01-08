@@ -8,7 +8,7 @@ import (
 	_ "github.com/AmithSAI007/prj-flexdesk-user-service/docs"
 	"github.com/AmithSAI007/prj-flexdesk-user-service/internal/api"
 	"github.com/AmithSAI007/prj-flexdesk-user-service/internal/config"
-	db "github.com/AmithSAI007/prj-flexdesk-user-service/internal/db/generated"
+	"github.com/AmithSAI007/prj-flexdesk-user-service/internal/db"
 	"github.com/AmithSAI007/prj-flexdesk-user-service/internal/handler"
 	"github.com/AmithSAI007/prj-flexdesk-user-service/internal/middleware"
 	"github.com/AmithSAI007/prj-flexdesk-user-service/internal/service"
@@ -39,7 +39,10 @@ import (
 // @description                 "Type 'Bearer' followed by a space and a JWT token."
 func main() {
 
-	cfg := config.LoadConfig()
+	cfg, err := config.LoadConfig(".")
+	if err != nil {
+		log.Fatalf("Failed to load configuration: %v", err)
+	}
 
 	logger, err := config.NewLogger()
 	if err != nil {
@@ -77,7 +80,7 @@ func main() {
 	}
 	logger.Info("Database connection established successfully")
 
-	store := db.New(dbpool)
+	store := db.NewStore(dbpool)
 
 	keyService := token.NewLocalKeyService(logger)
 	privateKey, publicKey, err := keyService.LoadKeys(ctx, cfg.PrivateKeyPath, cfg.PublicKeyPath)
@@ -91,10 +94,9 @@ func main() {
 		logger,
 		privateKey,
 		publicKey,
-		store,
 	)
 
-	userService := service.NewUserService(logger, store)
+	userService := service.NewUserService(logger)
 	authService := service.NewAuthService(logger, userService, tokenService, store)
 
 	authMiddleware := middleware.NewAuthMiddleware(logger, tokenService)
@@ -105,8 +107,8 @@ func main() {
 	router.Use(middleware.PrometheusMetrics())
 
 	validate := validator.New()
-	authHandler := handler.NewAuthHandler(logger, authService, validate)
-	userHandler := handler.NewUserHandler(logger, userService, validate)
+	authHandler := handler.NewAuthHandler(logger, authService, validate, store)
+	userHandler := handler.NewUserHandler(logger, userService, validate, store)
 	handlers := &api.HandlerRegistry{
 		AuthHandler:    authHandler,
 		AuthMiddleware: authMiddleware,
